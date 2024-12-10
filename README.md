@@ -94,7 +94,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 👤 Author
+## Author
 
 **Sakib Ahmed Shuva**
 - GitHub: [@SakibAhmedShuva](https://github.com/SakibAhmedShuva)
@@ -111,6 +111,6 @@ Give a ⭐️ if this project helped you!
 - Pillow
 - Web browser with JavaScript enabled
 
-## 🐛 Known Issues
+## Known Issues
 
 Please check the [Issues](https://github.com/SakibAhmedShuva/S3-File-Manager/issues) page for current known issues and feature requests.
