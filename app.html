@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>S3 File Manager</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            background-color: #f5f5f5;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            margin-right: 5px;
+        }
+        .btn-primary {
+            background-color: #007bff;
+            color: white;
+        }
+        .btn-danger {
+            background-color: #dc3545;
+            color: white;
+        }
+        .file-list {
+            margin-top: 20px;
+        }
+        .file-item {
+            background-color: white;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+            display: flex;
+            align-items: center;
+        }
+        .file-info {
+            flex-grow: 1;
+        }
+        .thumbnail {
+            width: 100px;
+            height: 100px;
+            object-fit: cover;
+            margin-right: 15px;
+            border-radius: 4px;
+        }
+        .alert {
+            padding: 10px;
+            margin-bottom: 15px;
+            border-radius: 4px;
+            display: none;
+        }
+        .alert-success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .alert-error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .upload-section {
+            margin-top: 20px;
+            padding: 20px;
+            background-color: white;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+        }
+        #fileManagerSection {
+            display: none;
+        }
+        .file-actions {
+            display: flex;
+            gap: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>S3 File Manager</h1>
+
+    <div id="alerts">
+        <div id="successAlert" class="alert alert-success"></div>
+        <div id="errorAlert" class="alert alert-error"></div>
+    </div>
+
+    <div id="configSection" class="container">
+        <h2>S3 Configuration</h2>
+        <form id="configForm">
+            <div class="form-group">
+                <label for="bucket_name">Bucket Name:</label>
+                <input type="text" id="bucket_name" name="bucket_name" required>
+            </div>
+            <div class="form-group">
+                <label for="region">Region:</label>
+                <input type="text" id="region" name="region" required>
+            </div>
+            <div class="form-group">
+                <label for="access_key">Access Key:</label>
+                <input type="text" id="access_key" name="access_key" required>
+            </div>
+            <div class="form-group">
+                <label for="secret_key">Secret Key:</label>
+                <input type="password" id="secret_key" name="secret_key" required>
+            </div>
+            <button type="submit" class="btn btn-primary">Connect to S3</button>
+        </form>
+    </div>
+
+    <div id="fileManagerSection" class="container">
+        <div class="upload-section">
+            <h2>Upload File</h2>
+            <form id="uploadForm">
+                <div class="form-group">
+                    <label for="file">Select File:</label>
+                    <input type="file" id="file" name="file" required>
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="radio" name="public" value="false" checked onclick="toggleExpirationTime()"> Private (Generate presigned URL)
+                    </label>
+                    <label>
+                        <input type="radio" name="public" value="true" onclick="toggleExpirationTime()"> Public
+                    </label>
+                </div>
+                <div class="form-group" id="expirationTimeGroup">
+                    <label for="expires_in">Expiration Time (seconds):</label>
+                    <input type="number" id="expires_in" name="expires_in" value="3600" min="1" max="604800">
+                </div>
+                <button type="submit" class="btn btn-primary">Upload</button>
+            </form>
+        </div>
+
+        <div class="file-list">
+            <h2>Files in Bucket</h2>
+            <div id="fileList"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:5006';
+        let isConfigured = false;
+
+        function showAlert(message, isError = false) {
+            const successAlert = document.getElementById('successAlert');
+            const errorAlert = document.getElementById('errorAlert');
+            
+            if (isError) {
+                errorAlert.textContent = message;
+                errorAlert.style.display = 'block';
+                setTimeout(() => errorAlert.style.display = 'none', 5000);
+            } else {
+                successAlert.textContent = message;
+                successAlert.style.display = 'block';
+                setTimeout(() => successAlert.style.display = 'none', 5000);
+            }
+        }
+
+        function updateUI() {
+            document.getElementById('configSection').style.display = isConfigured ? 'none' : 'block';
+            document.getElementById('fileManagerSection').style.display = isConfigured ? 'block' : 'none';
+            if (isConfigured) {
+                loadFiles();
+            }
+        }
+
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text)
+                .then(() => showAlert('Link copied to clipboard!'))
+                .catch(err => showAlert('Failed to copy link: ' + err.message, true));
+        }
+
+        function toggleExpirationTime() {
+            const isPrivate = document.querySelector('input[name="public"]:checked').value === 'false';
+            document.getElementById('expirationTimeGroup').style.display = isPrivate ? 'block' : 'none';
+        }
+
+        function getFileUrl(file) {
+            if (file.isPublic) {
+                return `https://${document.getElementById('bucket_name').value}.s3.amazonaws.com/${file.key}`;
+            }
+            return file.url;
+        }
+
+        function getThumbnailElement(file) {
+            if (file.content_type && (file.content_type.startsWith('image/') || file.content_type.startsWith('video/'))) {
+                if (file.content_type.startsWith('video/')) {
+                    return `<video class="thumbnail" src="${file.url}" controls></video>`;
+                } else {
+                    return `<img class="thumbnail" src="${file.url}" alt="Thumbnail">`;
+                }
+            }
+            return '';
+        }
+
+        async function deleteFile(key) {
+            if (confirm(`Are you sure you want to delete ${key}?`)) {
+                try {
+                    const response = await fetch(`${API_BASE}/delete`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ key })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (response.ok) {
+                        showAlert('File deleted successfully!');
+                        loadFiles();
+                    } else {
+                        showAlert(data.error || 'Failed to delete file', true);
+                    }
+                } catch (error) {
+                    showAlert('Error deleting file: ' + error.message, true);
+                }
+            }
+        }
+
+        async function loadFiles() {
+            try {
+                const expiresIn = document.getElementById('expires_in').value;
+                const response = await fetch(`${API_BASE}/files?expires_in=${expiresIn}`);
+                const files = await response.json();
+                
+                if (response.ok) {
+                    const fileListElement = document.getElementById('fileList');
+                    if (files.length === 0) {
+                        fileListElement.innerHTML = '<p>No files found in bucket.</p>';
+                        return;
+                    }
+
+                    fileListElement.innerHTML = files.map(file => `
+                        <div class="file-item">
+                            ${getThumbnailElement(file)}
+                            <div class="file-info">
+                                <strong>${file.key}</strong><br>
+                                Size: ${(file.size / 1024).toFixed(2)} KB<br>
+                                Last Modified: ${new Date(file.last_modified).toLocaleString()}<br>
+                                Type: ${file.content_type || 'Unknown'}<br>
+                                Access: ${file.isPublic ? 'Public' : 'Private'}<br>
+                            </div>
+                            <div class="file-actions">
+                                <a href="${getFileUrl(file)}" target="_blank" class="btn btn-primary">Download</a>
+                                <button onclick="copyToClipboard('${getFileUrl(file)}')" class="btn btn-primary">Copy Link</button>
+                                <button onclick="deleteFile('${file.key}')" class="btn btn-danger">Delete</button>
+                            </div>
+                        </div>
+                    `).join('');
+                } else {
+                    showAlert(files.error || 'Failed to load files', true);
+                }
+            } catch (error) {
+                showAlert('Error loading files: ' + error.message, true);
+            }
+        }
+
+        document.getElementById('configForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const formData = {
+                bucket_name: document.getElementById('bucket_name').value,
+                region: document.getElementById('region').value,
+                access_key: document.getElementById('access_key').value,
+                secret_key: document.getElementById('secret_key').value
+            };
+
+            try {
+                const response = await fetch(`${API_BASE}/configure`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(formData)
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    isConfigured = true;
+                    showAlert('Successfully connected to S3!');
+                    updateUI();
+                } else {
+                    showAlert(data.error || 'Failed to configure S3', true);
+                }
+            } catch (error) {
+                showAlert('Error configuring S3: ' + error.message, true);
+            }
+        });
+
+        document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const formData = new FormData();
+            const fileInput = document.getElementById('file');
+            const isPublic = document.querySelector('input[name="public"]:checked').value === 'true';
+            const expiresIn = document.getElementById('expires_in').value;
+
+            formData.append('file', fileInput.files[0]);
+            formData.append('public', isPublic);
+            formData.append('expires_in', expiresIn);
+
+            try {
+                const response = await fetch(`${API_BASE}/upload`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showAlert('File uploaded successfully!');
+                    fileInput.value = '';
+                    loadFiles();
+                } else {
+                    showAlert(data.error || 'Failed to upload file', true);
+                }
+            } catch (error) {
+                showAlert('Error uploading file: ' + error.message, true);
+            }
+        });
+
+        // Initialize UI
+        updateUI();
+        toggleExpirationTime();
+    </script>
+</body>
+</html>
