@@ -81,11 +81,26 @@ def list_s3_files(expires_in=3600):
         files = []
         if 'Contents' in response:
             for obj in response['Contents']:
-                url = s3_client.generate_presigned_url(
-                    'get_object',
-                    Params={'Bucket': bucket_name, 'Key': obj['Key']},
-                    ExpiresIn=int(expires_in)
-                )
+                # Check if the object is public by getting its ACL
+                try:
+                    acl_response = s3_client.get_object_acl(Bucket=bucket_name, Key=obj['Key'])
+                    is_public = any(
+                        grant['Grantee'].get('URI') == 'http://acs.amazonaws.com/groups/global/AllUsers' 
+                        and grant['Permission'] in ['READ', 'FULL_CONTROL']
+                        for grant in acl_response['Grants']
+                    )
+                except:
+                    is_public = False
+
+                # Generate the appropriate URL based on whether the object is public
+                if is_public:
+                    url = f"https://{bucket_name}.s3.amazonaws.com/{obj['Key']}"
+                else:
+                    url = s3_client.generate_presigned_url(
+                        'get_object',
+                        Params={'Bucket': bucket_name, 'Key': obj['Key']},
+                        ExpiresIn=int(expires_in)
+                    )
                 
                 # Get content type
                 try:
@@ -99,7 +114,8 @@ def list_s3_files(expires_in=3600):
                     'size': obj['Size'],
                     'last_modified': obj['LastModified'].isoformat(),
                     'url': url,
-                    'content_type': content_type
+                    'content_type': content_type,
+                    'isPublic': is_public  # Add this field to indicate if the file is public
                 })
         return files
     except Exception as e:
@@ -177,6 +193,45 @@ def delete_file():
     try:
         s3_client.delete_object(Bucket=bucket_name, Key=key)
         return jsonify({"message": f"File {key} deleted successfully"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+@app.route('/delete-all', methods=['POST'])
+def delete_all_files():
+    if not s3_client:
+        return jsonify({"error": "S3 not configured"}), 400
+        
+    data = request.json
+    captcha = data.get('captcha')
+    expected_captcha = data.get('expected_captcha')
+    
+    if not captcha or not expected_captcha:
+        return jsonify({"error": "CAPTCHA verification required"}), 400
+        
+    if captcha.lower() != expected_captcha.lower():
+        return jsonify({"error": "Invalid CAPTCHA"}), 400
+        
+    try:
+        # List all objects in the bucket
+        response = s3_client.list_objects_v2(Bucket=bucket_name)
+        if 'Contents' in response:
+            # Create list of objects to delete
+            objects_to_delete = [{'Key': obj['Key']} for obj in response['Contents']]
+            
+            # Delete all objects
+            s3_client.delete_objects(
+                Bucket=bucket_name,
+                Delete={
+                    'Objects': objects_to_delete,
+                    'Quiet': True
+                }
+            )
+            
+            return jsonify({
+                "message": f"Successfully deleted {len(objects_to_delete)} files",
+                "count": len(objects_to_delete)
+            })
+        return jsonify({"message": "No files to delete"})
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
