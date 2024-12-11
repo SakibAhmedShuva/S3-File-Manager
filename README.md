@@ -8,21 +8,34 @@ A web-based file management interface for Amazon S3 buckets, built with Flask an
   - Easy setup with AWS credentials
   - Support for different regions
   - Secure credential handling
+  - Persistent session management
 
 - **File Management**
   - Upload files to S3
   - Generate presigned URLs for private files
   - Public/Private file access control
-  - Delete files from bucket
+  - Individual file deletion
+  - Bulk delete all files with CAPTCHA verification
   - List all files with details
   - Thumbnail preview for images and videos
+
+- **Advanced File Listing**
+  - Sort files by:
+    - Name
+    - Date Modified
+    - Size
+    - File Type
+  - Ascending/Descending sort order
+  - Real-time list refresh without losing session
+  - File metadata display
 
 - **User Interface**
   - Clean and responsive design
   - File preview capabilities
   - Copy shareable links
-  - File metadata display
+  - CAPTCHA security for destructive operations
   - Real-time status updates
+  - Refresh button for file list
 
 ## 🛠️ Installation
 
@@ -68,16 +81,23 @@ Enter these details in the configuration form when you first launch the applicat
 
 3. **Managing Files**
    - View all files in your bucket
+   - Sort files using various criteria
    - Download files directly
    - Copy shareable links
-   - Delete files as needed
+   - Delete individual files
    - Preview images and videos
 
-## 🔒 Security Considerations
+4. **Bulk Operations**
+   - Delete all files with CAPTCHA verification
+   - Refresh file list to see updates
+   - Sort files by different parameters
+
+## 🔒 Security Features
 
 - AWS credentials are handled server-side
 - Support for both public and private file access
 - Configurable expiration times for presigned URLs
+- CAPTCHA verification for bulk delete operations
 - Secure file handling with proper mime-type detection
 
 ## 🤝 Contributing
@@ -109,8 +129,17 @@ Give a ⭐️ if this project helped you!
 - Flask
 - boto3
 - Pillow
+- Flask-CORS
 - Web browser with JavaScript enabled
 
 ## Known Issues
 
 Please check the [Issues](https://github.com/SakibAhmedShuva/S3-File-Manager/issues) page for current known issues and feature requests.
+
+## Recent Updates
+
+- Added bulk delete functionality with CAPTCHA verification
+- Implemented file sorting capabilities
+- Added real-time file list refresh feature
+- Improved session management
+- Enhanced UI with better feedback and controls
