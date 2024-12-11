@@ -11,12 +11,48 @@
             margin: 0 auto;
             padding: 20px;
         }
+        .btn-refresh {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .btn-refresh:hover {
+            background-color: #0056b3;
+        }
         .container {
             background-color: #f5f5f5;
             padding: 20px;
             border-radius: 8px;
             margin-bottom: 20px;
         }
+        .delete-all-section {
+            margin-top: 20px;
+            padding: 20px;
+            background-color: #fff3f3;
+            border-radius: 4px;
+            border: 1px solid #ffcdd2;
+        }
+
+        .captcha-container {
+            margin: 10px 0;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .captcha-text {
+            font-family: 'Courier New', monospace;
+            font-size: 20px;
+            font-weight: bold;
+            letter-spacing: 3px;
+            color: #444;
+            user-select: none;
+        }
+
         .form-group {
             margin-bottom: 15px;
         }
@@ -155,14 +191,47 @@
                 <button type="submit" class="btn btn-primary">Upload</button>
             </form>
         </div>
-
         <div class="file-list">
             <h2>Files in Bucket</h2>
-            <div id="fileList"></div>
-        </div>
-    </div>
+            <div style="margin-bottom: 15px;">
+                <button onclick="loadFiles()" class="btn btn-primary" style="margin-bottom: 10px;">
+                    🔄 Refresh Files
+                </button>
+                
+                <div class="sorting-controls">
+                    <label>Sort by:</label>
+                    <select id="sortBy" onchange="loadFiles()" style="padding: 5px; margin-right: 10px;">
+                        <option value="name">Name</option>
+                        <option value="date">Date Modified</option>
+                        <option value="size">Size</option>
+                        <option value="type">Type</option>
+                    </select>
+                    <label>Order:</label>
+                    <select id="sortOrder" onchange="loadFiles()" style="padding: 5px;">
+                        <option value="asc">Ascending</option>
+                        <option value="desc">Descending</option>
+                    </select>
+                </div>
+                </div>
+                <div id="fileList"></div>
+            </div>
 
-    <script>
+        <div class="delete-all-section">
+            <h2>Delete All Files</h2>
+            <p>Warning: This action cannot be undone!</p>
+            <div class="captcha-container">
+                <span>CAPTCHA: </span>
+                <span id="captchaText" class="captcha-text"></span>
+                <button onclick="regenerateCaptcha()" class="btn btn-primary">Refresh CAPTCHA</button>
+            </div>
+            <div class="form-group">
+                <label for="captchaInput">Enter CAPTCHA:</label>
+                <input type="text" id="captchaInput" class="form-control" placeholder="Enter the CAPTCHA text above">
+            </div>
+            <button onclick="deleteAllFiles()" class="btn btn-danger">Delete All Files</button>
+        </div>
+    
+        <script>
         const API_BASE = 'http://localhost:5006';
         let isConfigured = false;
 
@@ -255,6 +324,31 @@
                         fileListElement.innerHTML = '<p>No files found in bucket.</p>';
                         return;
                     }
+
+                    // Sort files based on selected criteria
+                    const sortBy = document.getElementById('sortBy').value;
+                    const sortOrder = document.getElementById('sortOrder').value;
+
+                    files.sort((a, b) => {
+                        let compareResult;
+                        switch (sortBy) {
+                            case 'name':
+                                compareResult = a.key.localeCompare(b.key);
+                                break;
+                            case 'date':
+                                compareResult = new Date(a.last_modified) - new Date(b.last_modified);
+                                break;
+                            case 'size':
+                                compareResult = a.size - b.size;
+                                break;
+                            case 'type':
+                                compareResult = (a.content_type || '').localeCompare(b.content_type || '');
+                                break;
+                            default:
+                                compareResult = 0;
+                        }
+                        return sortOrder === 'desc' ? -compareResult : compareResult;
+                    });
 
                     fileListElement.innerHTML = files.map(file => `
                         <div class="file-item">
@@ -349,6 +443,66 @@
         // Initialize UI
         updateUI();
         toggleExpirationTime();
+        let currentCaptcha = '';
+
+        function generateCaptcha(length = 6) {
+            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+            let result = '';
+            for (let i = 0; i < length; i++) {
+                result += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            return result;
+        }
+
+        function regenerateCaptcha() {
+            currentCaptcha = generateCaptcha();
+            document.getElementById('captchaText').textContent = currentCaptcha;
+        }
+
+        async function deleteAllFiles() {
+            const captchaInput = document.getElementById('captchaInput').value;
+            
+            if (!captchaInput) {
+                showAlert('Please enter the CAPTCHA', true);
+                return;
+            }
+
+            if (!confirm('Are you sure you want to delete ALL files? This action cannot be undone!')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/delete-all`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        captcha: captchaInput,
+                        expected_captcha: currentCaptcha
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showAlert(`Successfully deleted ${data.count} files!`);
+                    loadFiles();
+                    document.getElementById('captchaInput').value = '';
+                    regenerateCaptcha();
+                } else {
+                    showAlert(data.error || 'Failed to delete files', true);
+                }
+            } catch (error) {
+                showAlert('Error deleting files: ' + error.message, true);
+            }
+        }
+
+        // Initialize CAPTCHA when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            regenerateCaptcha();
+        });
+
     </script>
 </body>
 </html>
