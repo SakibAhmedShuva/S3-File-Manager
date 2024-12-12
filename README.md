@@ -19,6 +19,12 @@ A web-based file management interface for Amazon S3 buckets, built with Flask an
   - List all files with details
   - Thumbnail preview for images and videos
 
+- **Folder Management**
+  - Create new folders
+  - Navigate through folder hierarchy
+  - Delete folders and their contents
+  - Breadcrumb navigation
+
 - **Advanced File Listing**
   - Sort files by:
     - Name
@@ -56,6 +62,47 @@ python app.py
 ```
 
 4. Open `app.html` in your web browser or serve it through a web server.
+
+## 📡 API Documentation
+
+The application includes a Postman collection (`S3 File Manager API.postman_collection.json`) that documents all available API endpoints. Import this collection into Postman to test the API endpoints:
+
+### Available Endpoints:
+
+1. **Configure S3 Connection**
+   - `POST /configure`
+   - Sets up AWS credentials and bucket configuration
+
+2. **List Files**
+   - `GET /files`
+   - Lists all files in the S3 bucket
+   - Supports folder prefix filtering
+
+3. **Upload File**
+   - `POST /upload`
+   - Uploads a file to S3
+   - Supports public/private access settings
+
+4. **Delete File**
+   - `POST /delete`
+   - Deletes a specific file from S3
+
+5. **Create Folder**
+   - `POST /create-folder`
+   - Creates a new folder in S3
+
+6. **Delete Folder**
+   - `POST /delete-folder`
+   - Deletes a folder and all its contents
+
+7. **Delete All Files**
+   - `POST /delete-all`
+   - Bulk deletion with CAPTCHA verification
+
+To use the Postman collection:
+1. Import `S3 File Manager API.postman_collection.json` into Postman
+2. Set up your environment variables if needed
+3. Test each endpoint with the provided example requests
 
 ## ⚙️ Configuration
 
