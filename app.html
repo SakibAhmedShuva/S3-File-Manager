@@ -11,48 +11,36 @@
             margin: 0 auto;
             padding: 20px;
         }
-        .btn-refresh {
-            display: inline-flex;
-            align-items: center;
-            gap: 5px;
-        }
-
-        .btn-refresh:hover {
-            background-color: #0056b3;
-        }
         .container {
             background-color: #f5f5f5;
             padding: 20px;
             border-radius: 8px;
             margin-bottom: 20px;
         }
-        .delete-all-section {
-            margin-top: 20px;
-            padding: 20px;
-            background-color: #fff3f3;
-            border-radius: 4px;
-            border: 1px solid #ffcdd2;
-        }
-
-        .captcha-container {
-            margin: 10px 0;
+        .folder-item {
+            cursor: pointer;
             padding: 10px;
+            margin: 5px 0;
             background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
             border-radius: 4px;
             display: flex;
             align-items: center;
-            gap: 10px;
         }
-
-        .captcha-text {
-            font-family: 'Courier New', monospace;
-            font-size: 20px;
-            font-weight: bold;
-            letter-spacing: 3px;
-            color: #444;
-            user-select: none;
+        .folder-icon {
+            margin-right: 10px;
+            font-size: 1.2em;
         }
-
+        .breadcrumb {
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+            margin-bottom: 15px;
+        }
+        .breadcrumb span {
+            cursor: pointer;
+            color: #007bff;
+        }
         .form-group {
             margin-bottom: 15px;
         }
@@ -121,6 +109,10 @@
             color: #721c24;
             border: 1px solid #f5c6cb;
         }
+        .file-actions {
+            display: flex;
+            gap: 10px;
+        }
         .upload-section {
             margin-top: 20px;
             padding: 20px;
@@ -128,15 +120,33 @@
             border-radius: 4px;
             border: 1px solid #ddd;
         }
-        #fileManagerSection {
-            display: none;
+        .delete-all-section {
+            margin-top: 20px;
+            padding: 20px;
+            background-color: #fff3f3;
+            border-radius: 4px;
+            border: 1px solid #ffcdd2;
         }
-        .file-actions {
+        .captcha-container {
+            margin: 10px 0;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
             display: flex;
+            align-items: center;
             gap: 10px;
+        }
+        .captcha-text {
+            font-family: 'Courier New', monospace;
+            font-size: 20px;
+            font-weight: bold;
+            letter-spacing: 3px;
+            color: #444;
+            user-select: none;
         }
     </style>
 </head>
+
 <body>
     <h1>S3 File Manager</h1>
 
@@ -168,7 +178,11 @@
         </form>
     </div>
 
-    <div id="fileManagerSection" class="container">
+    <div id="fileManagerSection" class="container" style="display: none;">
+        <div class="breadcrumb" id="breadcrumb">
+            <span onclick="navigateTo('')">Root</span>
+        </div>
+
         <div class="upload-section">
             <h2>Upload File</h2>
             <form id="uploadForm">
@@ -178,43 +192,43 @@
                 </div>
                 <div class="form-group">
                     <label>
-                        <input type="radio" name="public" value="false" checked onclick="toggleExpirationTime()"> Private (Generate presigned URL)
+                        <input type="radio" name="public" value="false" checked> Private
                     </label>
                     <label>
-                        <input type="radio" name="public" value="true" onclick="toggleExpirationTime()"> Public
+                        <input type="radio" name="public" value="true"> Public
                     </label>
                 </div>
-                <div class="form-group" id="expirationTimeGroup">
+                <div class="form-group">
                     <label for="expires_in">Expiration Time (seconds):</label>
-                    <input type="number" id="expires_in" name="expires_in" value="3600" min="1" max="604800">
+                    <input type="number" id="expires_in" name="expires_in" value="3600">
+                </div>
+                <div class="form-group">
+                    <label for="folder_path">Upload to Folder:</label>
+                    <input type="text" id="folder_path" name="folder_path" value="">
                 </div>
                 <button type="submit" class="btn btn-primary">Upload</button>
             </form>
         </div>
-        <div class="file-list">
-            <h2>Files in Bucket</h2>
-            <div style="margin-bottom: 15px;">
-                <button onclick="loadFiles()" class="btn btn-primary" style="margin-bottom: 10px;">
-                    🔄 Refresh Files
-                </button>
-                
-                <div class="sorting-controls">
-                    <label>Sort by:</label>
-                    <select id="sortBy" onchange="loadFiles()" style="padding: 5px; margin-right: 10px;">
-                        <option value="name">Name</option>
-                        <option value="date">Date Modified</option>
-                        <option value="size">Size</option>
-                        <option value="type">Type</option>
-                    </select>
-                    <label>Order:</label>
-                    <select id="sortOrder" onchange="loadFiles()" style="padding: 5px;">
-                        <option value="asc">Ascending</option>
-                        <option value="desc">Descending</option>
-                    </select>
-                </div>
-                </div>
-                <div id="fileList"></div>
+
+        <div class="folder-actions">
+            <h2>Folder Actions</h2>
+            <button onclick="showCreateFolderDialog()" class="btn btn-primary">Create New Folder</button>
+            <button onclick="loadFiles()" class="btn btn-primary">Refresh</button>
+        </div>
+
+        <div id="createFolderModal" style="display: none;">
+            <div class="modal-content">
+                <h3>Create New Folder</h3>
+                <input type="text" id="newFolderName" placeholder="Enter folder name">
+                <button onclick="createFolder()" class="btn btn-primary">Create</button>
+                <button onclick="closeCreateFolderDialog()" class="btn btn-secondary">Cancel</button>
             </div>
+        </div>
+
+        <div class="file-list">
+            <h2>Files and Folders</h2>
+            <div id="fileList"></div>
+        </div>
 
         <div class="delete-all-section">
             <h2>Delete All Files</h2>
@@ -226,13 +240,15 @@
             </div>
             <div class="form-group">
                 <label for="captchaInput">Enter CAPTCHA:</label>
-                <input type="text" id="captchaInput" class="form-control" placeholder="Enter the CAPTCHA text above">
+                <input type="text" id="captchaInput">
             </div>
             <button onclick="deleteAllFiles()" class="btn btn-danger">Delete All Files</button>
         </div>
-    
-        <script>
+    </div>
+
+    <script>
         const API_BASE = 'http://localhost:5006';
+        let currentPath = '';
         let isConfigured = false;
 
         function showAlert(message, isError = false) {
@@ -250,41 +266,63 @@
             }
         }
 
-        function updateUI() {
-            document.getElementById('configSection').style.display = isConfigured ? 'none' : 'block';
-            document.getElementById('fileManagerSection').style.display = isConfigured ? 'block' : 'none';
-            if (isConfigured) {
-                loadFiles();
+        function updateBreadcrumb() {
+            const parts = currentPath.split('/').filter(p => p);
+            let html = '<span onclick="navigateTo(\'\')">Root</span>';
+            let path = '';
+            
+            parts.forEach((part, index) => {
+                path += part + '/';
+                html += ` > <span onclick="navigateTo('${path}')">${part}</span>`;
+            });
+            
+            document.getElementById('breadcrumb').innerHTML = html;
+        }
+
+        function showCreateFolderDialog() {
+            document.getElementById('createFolderModal').style.display = 'block';
+        }
+
+        function closeCreateFolderDialog() {
+            document.getElementById('createFolderModal').style.display = 'none';
+            document.getElementById('newFolderName').value = '';
+        }
+
+        async function createFolder() {
+            const folderName = document.getElementById('newFolderName').value.trim();
+            if (!folderName) {
+                showAlert('Please enter a folder name', true);
+                return;
             }
-        }
 
-        function copyToClipboard(text) {
-            navigator.clipboard.writeText(text)
-                .then(() => showAlert('Link copied to clipboard!'))
-                .catch(err => showAlert('Failed to copy link: ' + err.message, true));
-        }
+            try {
+                const response = await fetch(`${API_BASE}/create-folder`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        path: currentPath + folderName
+                    })
+                });
 
-        function toggleExpirationTime() {
-            const isPrivate = document.querySelector('input[name="public"]:checked').value === 'false';
-            document.getElementById('expirationTimeGroup').style.display = isPrivate ? 'block' : 'none';
-        }
-
-        function getFileUrl(file) {
-            if (file.isPublic) {
-                return `https://${document.getElementById('bucket_name').value}.s3.amazonaws.com/${file.key}`;
-            }
-            return file.url;
-        }
-
-        function getThumbnailElement(file) {
-            if (file.content_type && (file.content_type.startsWith('image/') || file.content_type.startsWith('video/'))) {
-                if (file.content_type.startsWith('video/')) {
-                    return `<video class="thumbnail" src="${file.url}" controls></video>`;
+                const data = await response.json();
+                if (response.ok) {
+                    showAlert('Folder created successfully!');
+                    closeCreateFolderDialog();
+                    loadFiles();
                 } else {
-                    return `<img class="thumbnail" src="${file.url}" alt="Thumbnail">`;
+                    showAlert(data.error || 'Failed to create folder', true);
                 }
+            } catch (error) {
+                showAlert('Error creating folder: ' + error.message, true);
             }
-            return '';
+        }
+
+        function navigateTo(path) {
+            currentPath = path;
+            updateBreadcrumb();
+            loadFiles();
         }
 
         async function deleteFile(key) {
@@ -297,9 +335,8 @@
                         },
                         body: JSON.stringify({ key })
                     });
-                    
+
                     const data = await response.json();
-                    
                     if (response.ok) {
                         showAlert('File deleted successfully!');
                         loadFiles();
@@ -312,64 +349,74 @@
             }
         }
 
-        async function loadFiles() {
-            try {
-                const expiresIn = document.getElementById('expires_in').value;
-                const response = await fetch(`${API_BASE}/files?expires_in=${expiresIn}`);
-                const files = await response.json();
-                
-                if (response.ok) {
-                    const fileListElement = document.getElementById('fileList');
-                    if (files.length === 0) {
-                        fileListElement.innerHTML = '<p>No files found in bucket.</p>';
-                        return;
-                    }
-
-                    // Sort files based on selected criteria
-                    const sortBy = document.getElementById('sortBy').value;
-                    const sortOrder = document.getElementById('sortOrder').value;
-
-                    files.sort((a, b) => {
-                        let compareResult;
-                        switch (sortBy) {
-                            case 'name':
-                                compareResult = a.key.localeCompare(b.key);
-                                break;
-                            case 'date':
-                                compareResult = new Date(a.last_modified) - new Date(b.last_modified);
-                                break;
-                            case 'size':
-                                compareResult = a.size - b.size;
-                                break;
-                            case 'type':
-                                compareResult = (a.content_type || '').localeCompare(b.content_type || '');
-                                break;
-                            default:
-                                compareResult = 0;
-                        }
-                        return sortOrder === 'desc' ? -compareResult : compareResult;
+        async function deleteFolder(path) {
+            if (confirm(`Are you sure you want to delete the folder and all its contents at ${path}?`)) {
+                try {
+                    const response = await fetch(`${API_BASE}/delete-folder`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ path })
                     });
 
-                    fileListElement.innerHTML = files.map(file => `
-                        <div class="file-item">
-                            ${getThumbnailElement(file)}
-                            <div class="file-info">
-                                <strong>${file.key}</strong><br>
-                                Size: ${(file.size / 1024).toFixed(2)} KB<br>
-                                Last Modified: ${new Date(file.last_modified).toLocaleString()}<br>
-                                Type: ${file.content_type || 'Unknown'}<br>
-                                Access: ${file.isPublic ? 'Public' : 'Private'}<br>
-                            </div>
-                            <div class="file-actions">
-                                <a href="${getFileUrl(file)}" target="_blank" class="btn btn-primary">Download</a>
-                                <button onclick="copyToClipboard('${getFileUrl(file)}')" class="btn btn-primary">Copy Link</button>
-                                <button onclick="deleteFile('${file.key}')" class="btn btn-danger">Delete</button>
-                            </div>
-                        </div>
-                    `).join('');
-                } else {
-                    showAlert(files.error || 'Failed to load files', true);
+                    const data = await response.json();
+                    if (response.ok) {
+                        showAlert('Folder deleted successfully!');
+                        navigateTo(currentPath.split('/').slice(0, -2).join('/') + '/');
+                    } else {
+                        showAlert(data.error || 'Failed to delete folder', true);
+                    }
+                } catch (error) {
+                    showAlert('Error deleting folder: ' + error.message, true);
                 }
+            }
+        }
+
+        async function loadFiles() {
+            try {
+                const response = await fetch(`${API_BASE}/files?prefix=${currentPath}`);
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to load files');
+                }
+
+                const fileListElement = document.getElementById('fileList');
+                let html = '';
+
+                data.forEach(item => {
+                    const isFolder = item.key.endsWith('/');
+                    const name = item.key.split('/').pop() || item.key;
+
+                    if (isFolder) {
+                        html += `
+                            <div class="folder-item">
+                                <span class="folder-icon">📁</span>
+                                <span onclick="navigateTo('${item.key}')">${name}</span>
+                                <button onclick="deleteFolder('${item.key}')" class="btn btn-danger">Delete Folder</button>
+                            </div>
+                        `;
+                    } else {
+                        html += `
+                            <div class="file-item">
+                                ${item.thumbnail ? `<img src="data:image/jpeg;base64,${item.thumbnail}" class="thumbnail" alt="Thumbnail">` : ''}
+                                <div class="file-info">
+                                    <strong>${name}</strong><br>
+                                    Size: ${(item.size / 1024).toFixed(2)} KB<br>
+                                    Last Modified: ${new Date(item.last_modified).toLocaleString()}<br>
+                                    Access: ${item.isPublic ? 'Public' : 'Private'}
+                                </div>
+                                <div class="file-actions">
+                                    <a href="${item.url}" target="_blank" class="btn btn-primary">View/Download</a>
+                                    <button onclick="deleteFile('${item.key}')" class="btn btn-danger">Delete</button>
+                                </div>
+                            </div>
+                        `;
+                    }
+                });
+
+                fileListElement.innerHTML = html || '<p>This folder is empty</p>';
             } catch (error) {
                 showAlert('Error loading files: ' + error.message, true);
             }
@@ -395,11 +442,12 @@
                 });
                 
                 const data = await response.json();
-                
                 if (response.ok) {
                     isConfigured = true;
+                    document.getElementById('configSection').style.display = 'none';
+                    document.getElementById('fileManagerSection').style.display = 'block';
                     showAlert('Successfully connected to S3!');
-                    updateUI();
+                    loadFiles();
                 } else {
                     showAlert(data.error || 'Failed to configure S3', true);
                 }
@@ -415,10 +463,12 @@
             const fileInput = document.getElementById('file');
             const isPublic = document.querySelector('input[name="public"]:checked').value === 'true';
             const expiresIn = document.getElementById('expires_in').value;
+            const folderPath = document.getElementById('folder_path').value;
 
             formData.append('file', fileInput.files[0]);
             formData.append('public', isPublic);
             formData.append('expires_in', expiresIn);
+            formData.append('folder_path', folderPath || currentPath);
 
             try {
                 const response = await fetch(`${API_BASE}/upload`, {
@@ -427,7 +477,6 @@
                 });
                 
                 const data = await response.json();
-                
                 if (response.ok) {
                     showAlert('File uploaded successfully!');
                     fileInput.value = '';
@@ -440,9 +489,6 @@
             }
         });
 
-        // Initialize UI
-        updateUI();
-        toggleExpirationTime();
         let currentCaptcha = '';
 
         function generateCaptcha(length = 6) {
@@ -484,7 +530,6 @@
                 });
 
                 const data = await response.json();
-
                 if (response.ok) {
                     showAlert(`Successfully deleted ${data.count} files!`);
                     loadFiles();
@@ -502,7 +547,6 @@
         document.addEventListener('DOMContentLoaded', () => {
             regenerateCaptcha();
         });
-
     </script>
 </body>
 </html>
