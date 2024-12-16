@@ -1,21 +1,28 @@
-from flask import Flask, request, jsonify, send_file
-from flask_cors import CORS
-import boto3
-from botocore.exceptions import ClientError
-import os
-from werkzeug.utils import secure_filename
-import mimetypes
-import base64
-from io import BytesIO
-from PIL import Image
+# Import required libraries
+from flask import Flask, request, jsonify, send_file  # Flask web framework components
+from flask_cors import CORS  # Cross-Origin Resource Sharing support
+import boto3  # AWS SDK for Python
+from botocore.exceptions import ClientError  # AWS specific exceptions
+import os  # Operating system interface
+from werkzeug.utils import secure_filename  # Secure file handling
+import mimetypes  # File type detection
+import base64  # Base64 encoding/decoding
+from io import BytesIO  # In-memory binary streams
+from PIL import Image  # Python Imaging Library for image processing
 
+# Initialize Flask application with CORS support
 app = Flask(__name__)
 CORS(app)
 
+# Global variables for S3 client and bucket name
 s3_client = None
 bucket_name = None
 
 def init_s3_client(access_key, secret_key, region):
+    """
+    Initialize the S3 client with provided AWS credentials
+    Returns True if successful, error response if failed
+    """
     global s3_client
     try:
         s3_client = boto3.client(
@@ -29,7 +36,13 @@ def init_s3_client(access_key, secret_key, region):
         return {"error": str(e)}, 400
 
 def generate_thumbnail(file_path, max_size=(100, 100)):
-    """Generate a thumbnail for image files"""
+    """
+    Generate a thumbnail for image files
+    Returns base64 encoded thumbnail or None if generation fails
+    Parameters:
+        file_path: Path to the image file
+        max_size: Maximum dimensions for thumbnail (width, height)
+    """
     try:
         with Image.open(file_path) as img:
             img.thumbnail(max_size)
@@ -40,15 +53,26 @@ def generate_thumbnail(file_path, max_size=(100, 100)):
         return None
 
 def upload_to_s3(file_path, s3_key, make_public=False, expires_in=3600):
-    """Upload a file to S3 and return a pre-signed URL or public URL."""
+    """
+    Upload a file to S3 and generate appropriate access URL
+    Parameters:
+        file_path: Local path to file
+        s3_key: Desired key (path) in S3
+        make_public: Boolean to make file publicly accessible
+        expires_in: Expiration time for presigned URLs in seconds
+    Returns:
+        Tuple of (URL, thumbnail)
+    """
     try:
+        # Set up extra arguments for upload
         extra_args = {'ACL': 'public-read'} if make_public else {}
         
-        # Add content type detection
+        # Detect and set content type
         content_type = mimetypes.guess_type(file_path)[0]
         if content_type:
             extra_args['ContentType'] = content_type
         
+        # Upload file to S3
         s3_client.upload_file(
             file_path, 
             bucket_name, 
@@ -56,6 +80,7 @@ def upload_to_s3(file_path, s3_key, make_public=False, expires_in=3600):
             ExtraArgs=extra_args
         )
         
+        # Generate appropriate URL based on public/private setting
         if make_public:
             url = f"https://{bucket_name}.s3.amazonaws.com/{s3_key}"
         else:
@@ -65,7 +90,7 @@ def upload_to_s3(file_path, s3_key, make_public=False, expires_in=3600):
                 ExpiresIn=int(expires_in)
             )
             
-        # Generate thumbnail for images and videos
+        # Generate thumbnail for media files
         thumbnail = None
         if content_type and content_type.startswith(('image/', 'video/')):
             thumbnail = generate_thumbnail(file_path)
@@ -75,13 +100,19 @@ def upload_to_s3(file_path, s3_key, make_public=False, expires_in=3600):
         raise Exception(f"Error uploading to S3: {str(e)}")
 
 def list_s3_files(expires_in=3600):
-    """List all files in the S3 bucket."""
+    """
+    List all files in the S3 bucket with their metadata
+    Parameters:
+        expires_in: Expiration time for presigned URLs in seconds
+    Returns:
+        List of dictionaries containing file metadata
+    """
     try:
         response = s3_client.list_objects_v2(Bucket=bucket_name)
         files = []
         if 'Contents' in response:
             for obj in response['Contents']:
-                # Check if the object is public by getting its ACL
+                # Check object's public/private status
                 try:
                     acl_response = s3_client.get_object_acl(Bucket=bucket_name, Key=obj['Key'])
                     is_public = any(
@@ -92,7 +123,7 @@ def list_s3_files(expires_in=3600):
                 except:
                     is_public = False
 
-                # Generate the appropriate URL based on whether the object is public
+                # Generate appropriate URL
                 if is_public:
                     url = f"https://{bucket_name}.s3.amazonaws.com/{obj['Key']}"
                 else:
@@ -109,20 +140,24 @@ def list_s3_files(expires_in=3600):
                 except:
                     content_type = mimetypes.guess_type(obj['Key'])[0] or ''
                 
+                # Compile file metadata
                 files.append({
                     'key': obj['Key'],
                     'size': obj['Size'],
                     'last_modified': obj['LastModified'].isoformat(),
                     'url': url,
                     'content_type': content_type,
-                    'isPublic': is_public  # Add this field to indicate if the file is public
+                    'isPublic': is_public
                 })
         return files
     except Exception as e:
         raise Exception(f"Error listing S3 files: {str(e)}")
 
+# API Routes
+
 @app.route('/configure', methods=['POST'])
 def configure():
+    """Configure S3 client with provided credentials"""
     global bucket_name
     data = request.json
     bucket_name = data.get('bucket_name')
@@ -137,6 +172,7 @@ def configure():
 
 @app.route('/files', methods=['GET'])
 def list_files():
+    """List all files in the configured S3 bucket"""
     if not s3_client:
         return jsonify({"error": "S3 not configured"}), 400
     try:
@@ -150,6 +186,7 @@ def list_files():
 
 @app.route('/create-folder', methods=['POST'])
 def create_folder():
+    """Create a new folder (prefix) in S3"""
     if not s3_client:
         return jsonify({"error": "S3 not configured"}), 400
         
@@ -160,7 +197,7 @@ def create_folder():
         return jsonify({"error": "No folder path provided"}), 400
         
     try:
-        # Create an empty object with a trailing slash to represent a folder
+        # Create empty object with trailing slash
         s3_client.put_object(Bucket=bucket_name, Key=f"{path}/")
         return jsonify({"message": f"Folder {path} created successfully"})
     except Exception as e:
@@ -168,6 +205,10 @@ def create_folder():
 
 @app.route('/upload', methods=['POST'])
 def upload():
+    """
+    Handle file uploads to S3
+    Supports folder paths, public/private access, and generates thumbnails for media
+    """
     if not s3_client:
         return jsonify({"error": "S3 not configured"}), 400
 
@@ -178,13 +219,13 @@ def upload():
     if file.filename == '':
         return jsonify({"error": "No file selected"}), 400
 
-    # Get folder path from form data
     folder_path = request.form.get('folder_path', '').strip('/')
     
     try:
+        # Secure the filename
         filename = secure_filename(file.filename)
         
-        # Construct the full S3 key including folder path
+        # Build full S3 key
         s3_key = f"{folder_path}/{filename}" if folder_path else filename
         
         # Create temporary file
@@ -192,23 +233,22 @@ def upload():
         os.makedirs(os.path.dirname(temp_path), exist_ok=True)
         file.save(temp_path)
         
-        # Get public/private setting and expiration
+        # Get upload settings
         make_public = request.form.get('public') == 'true'
         expires_in = request.form.get('expires_in', 3600)
         
-        # If folder doesn't exist, create it first
+        # Create folder if needed
         if folder_path:
             try:
                 s3_client.head_object(Bucket=bucket_name, Key=f"{folder_path}/")
             except ClientError as e:
                 if e.response['Error']['Code'] == '404':
-                    # Create folder marker object
                     s3_client.put_object(Bucket=bucket_name, Key=f"{folder_path}/")
         
-        # Upload file
+        # Upload and get URL/thumbnail
         url, thumbnail = upload_to_s3(temp_path, s3_key, make_public, expires_in)
         
-        # Clean up temporary file
+        # Clean up
         os.remove(temp_path)
         
         return jsonify({
@@ -220,13 +260,14 @@ def upload():
         })
         
     except Exception as e:
-        # Clean up temporary file if it exists
+        # Clean up on error
         if 'temp_path' in locals() and os.path.exists(temp_path):
             os.remove(temp_path)
         return jsonify({"error": str(e)}), 400
     
 @app.route('/delete', methods=['POST'])
 def delete_file():
+    """Delete a single file from S3"""
     if not s3_client:
         return jsonify({"error": "S3 not configured"}), 400
         
@@ -241,8 +282,13 @@ def delete_file():
         return jsonify({"message": f"File {key} deleted successfully"})
     except Exception as e:
         return jsonify({"error": str(e)}), 400
+
 @app.route('/delete-folder', methods=['POST'])
 def delete_folder():
+    """
+    Delete a folder and all its contents from S3
+    Handles pagination for folders with many objects
+    """
     if not s3_client:
         return jsonify({"error": "S3 not configured"}), 400
         
@@ -253,10 +299,11 @@ def delete_folder():
         return jsonify({"error": "No folder path provided"}), 400
         
     try:
-        # List all objects in the folder
+        # Get paginator for handling large folders
         paginator = s3_client.get_paginator('list_objects_v2')
         objects_to_delete = []
         
+        # Collect all objects in folder
         for page in paginator.paginate(Bucket=bucket_name, Prefix=f"{folder_path}/"):
             if 'Contents' in page:
                 objects_to_delete.extend(
@@ -264,7 +311,7 @@ def delete_folder():
                 )
         
         if objects_to_delete:
-            # Delete objects in batches of 1000 (S3 limit)
+            # Delete in batches of 1000 (S3 limit)
             for i in range(0, len(objects_to_delete), 1000):
                 batch = objects_to_delete[i:i + 1000]
                 s3_client.delete_objects(
@@ -288,6 +335,10 @@ def delete_folder():
 
 @app.route('/delete-all', methods=['POST'])
 def delete_all_files():
+    """
+    Delete all files in the bucket
+    Requires CAPTCHA verification for safety
+    """
     if not s3_client:
         return jsonify({"error": "S3 not configured"}), 400
         
@@ -295,6 +346,7 @@ def delete_all_files():
     captcha = data.get('captcha')
     expected_captcha = data.get('expected_captcha')
     
+    # Verify CAPTCHA
     if not captcha or not expected_captcha:
         return jsonify({"error": "CAPTCHA verification required"}), 400
         
@@ -302,13 +354,11 @@ def delete_all_files():
         return jsonify({"error": "Invalid CAPTCHA"}), 400
         
     try:
-        # List all objects in the bucket
+        # List and delete all objects
         response = s3_client.list_objects_v2(Bucket=bucket_name)
         if 'Contents' in response:
-            # Create list of objects to delete
             objects_to_delete = [{'Key': obj['Key']} for obj in response['Contents']]
             
-            # Delete all objects
             s3_client.delete_objects(
                 Bucket=bucket_name,
                 Delete={
@@ -325,5 +375,6 @@ def delete_all_files():
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
+# Run the Flask application
 if __name__ == '__main__':
     app.run(port=5006, debug=True)
